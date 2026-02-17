@@ -3,6 +3,7 @@ package world
 import (
 	"log/slog"
 	"math/rand/v2"
+	"runtime"
 	"time"
 )
 
@@ -60,6 +61,10 @@ type Config struct {
 	// Entities is an EntityRegistry with all Entity types registered that may
 	// be added to the World.
 	Entities EntityRegistry
+	// TickWorkers specifies the number of goroutines used for parallel chunk
+	// and entity ticking. If set to 0, defaults to the number of CPU cores.
+	// Higher values increase parallelism but also increase memory usage.
+	TickWorkers int
 }
 
 // New creates a new World using the Config conf. The World returned will start
@@ -90,6 +95,9 @@ func (conf Config) New() *World {
 		t := uint64(time.Now().UnixNano())
 		conf.RandSource = rand.NewPCG(t, t)
 	}
+	if conf.TickWorkers <= 0 {
+		conf.TickWorkers = runtime.NumCPU()
+	}
 	s := conf.Provider.Settings()
 	w := &World{
 		scheduledUpdates: newScheduledTickQueue(s.CurrentTick),
@@ -98,12 +106,19 @@ func (conf Config) New() *World {
 		chunks:           make(map[ChunkPos]*Column),
 		queueClosing:     make(chan struct{}),
 		closing:          make(chan struct{}),
-		queue:            make(chan transaction, 128),
-		r:                rand.New(conf.RandSource),
-		advance:          s.ref.Add(1) == 1,
-		conf:             conf,
-		ra:               conf.Dim.Range(),
-		set:              s,
+		// Priority queues: high, normal, low - each with 128 buffer
+		queues: [3]chan transaction{
+			make(chan transaction, 64),  // High priority - player actions
+			make(chan transaction, 128), // Normal priority
+			make(chan transaction, 64),  // Low priority - saves, cleanup
+		},
+		r:           rand.New(conf.RandSource),
+		advance:     s.ref.Add(1) == 1,
+		conf:        conf,
+		ra:          conf.Dim.Range(),
+		set:         s,
+		spatialGrid: newSpatialGrid(16), // 16 blocks = 1 chunk cell size
+		tickWorkers: conf.TickWorkers,
 	}
 	w.weather = weather{w: w}
 	var h Handler = NopHandler{}

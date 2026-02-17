@@ -64,3 +64,8 @@ func chunkPosFromVec3(vec3 mgl64.Vec3) ChunkPos {
 func chunkPosFromBlockPos(p cube.Pos) ChunkPos {
 	return ChunkPos{int32(p[0] >> 4), int32(p[2] >> 4)}
 }
+
+// vec3FromChunkPos returns the minimum block position of a chunk.
+func vec3FromChunkPos(pos ChunkPos) mgl64.Vec3 {
+	return mgl64.Vec3{float64(pos[0] << 4), 0, float64(pos[1] << 4)}
+}

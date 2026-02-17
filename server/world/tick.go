@@ -4,6 +4,7 @@ import (
 	"maps"
 	"math/rand/v2"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/df-mc/dragonfly/server/block/cube"
@@ -195,55 +196,158 @@ func (t ticker) anyWithinDistance(pos ChunkPos, loaded []ChunkPos, r int32) bool
 }
 
 // tickEntities ticks all entities in the world, making sure they are still located in the correct chunks and
-// updating where necessary.
+// updating where necessary. It uses spatial culling to only tick entities within the tick range of any player.
 func (t ticker) tickEntities(tx *Tx, tick int64) {
-	for handle, lastPos := range tx.World().entities {
-		e := handle.mustEntity(tx)
-		chunkPos := chunkPosFromVec3(handle.data.Pos)
+	w := tx.World()
 
-		c, ok := tx.World().chunks[chunkPos]
-		if !ok {
-			continue
-		}
+	// Get player chunk positions for culling
+	playerChunks := w.playerChunkPositions()
+	tickRange := int32(w.tickRange())
 
-		if lastPos != chunkPos {
-			// The entity was stored using an outdated chunk position. We update it and make sure it is ready
-			// for loaders to view it.
-			tx.World().entities[handle] = chunkPos
-			c.Entities = append(c.Entities, handle)
-
-			var viewers []Viewer
-
-			// When changing an entity's world, then teleporting it immediately, we could end up in a situation
-			// where the old chunk of the entity was not loaded. In this case, it should be safe simply to ignore
-			// the loaders from the old chunk. We can assume they never saw the entity in the first place.
-			if old, ok := tx.World().chunks[lastPos]; ok {
-				old.Entities = sliceutil.DeleteVal(old.Entities, handle)
-				viewers = old.viewers
-			}
-
-			for _, viewer := range viewers {
-				if slices.Index(c.viewers, viewer) == -1 {
-					// First we hide the entity from all loaders that were previously viewing it, but no
-					// longer are.
-					viewer.HideEntity(e)
-				}
-			}
-			for _, viewer := range c.viewers {
-				if slices.Index(viewers, viewer) == -1 {
-					// Then we show the entity to all loaders that are now viewing the entity in the new
-					// chunk.
-					showEntity(e, viewer)
-				}
-			}
-		}
-
-		if len(c.viewers) > 0 {
-			if te, ok := e.(TickerEntity); ok {
-				te.Tick(tx, tick)
+	// Build set of chunks to process for culling
+	chunksToTick := make(map[ChunkPos]bool)
+	for _, pc := range playerChunks {
+		for dx := -tickRange; dx <= tickRange; dx++ {
+			for dz := -tickRange; dz <= tickRange; dz++ {
+				chunksToTick[ChunkPos{pc[0] + dx, pc[1] + dz}] = true
 			}
 		}
 	}
+
+	// Use parallel chunk processing if we have multiple workers
+	if w.tickWorkers > 1 && len(w.chunks) > 4 {
+		t.tickEntitiesParallel(tx, w, tick, chunksToTick)
+		return
+	}
+
+	// Single-threaded fallback
+	t.tickEntitiesSequential(tx, w, tick, chunksToTick)
+}
+
+// tickEntitiesSequential ticks entities in a single thread (for low entity counts).
+func (t ticker) tickEntitiesSequential(tx *Tx, w *World, tick int64, chunksToTick map[ChunkPos]bool) {
+	for handle, lastPos := range w.entities {
+		t.tickEntity(tx, w, handle, lastPos, tick, chunksToTick)
+	}
+}
+
+// tickEntitiesParallel ticks entities using multiple goroutines for better performance.
+func (t ticker) tickEntitiesParallel(tx *Tx, w *World, tick int64, chunksToTick map[ChunkPos]bool) {
+	// Create work channel
+	type entityWork struct {
+		handle   *EntityHandle
+		lastPos  ChunkPos
+		chunkPos ChunkPos
+	}
+
+	workChan := make(chan entityWork, len(w.entities))
+	resultChan := make(chan struct {
+		handle      *EntityHandle
+		newChunkPos ChunkPos
+	}, len(w.entities))
+
+	// Send all work
+	for handle, lastPos := range w.entities {
+		workChan <- entityWork{
+			handle:   handle,
+			lastPos:  lastPos,
+			chunkPos: chunkPosFromVec3(handle.data.Pos),
+		}
+	}
+	close(workChan)
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < w.tickWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for work := range workChan {
+				t.tickEntity(tx, w, work.handle, work.lastPos, tick, chunksToTick)
+				resultChan <- struct {
+					handle      *EntityHandle
+					newChunkPos ChunkPos
+				}{work.handle, work.chunkPos}
+			}
+		}()
+	}
+
+	// Wait for completion
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results and update spatial grid
+	for result := range resultChan {
+		oldPos := chunkPosFromVec3(result.handle.data.Pos)
+		if oldPos != result.newChunkPos {
+			w.spatialGrid.Update(result.handle, vec3FromChunkPos(oldPos), result.handle.data.Pos)
+		}
+	}
+}
+
+// tickEntity ticks a single entity, handling chunk position updates.
+func (t ticker) tickEntity(tx *Tx, w *World, handle *EntityHandle, lastPos ChunkPos, tick int64, chunksToTick map[ChunkPos]bool) {
+	e := handle.mustEntity(tx)
+	chunkPos := chunkPosFromVec3(handle.data.Pos)
+
+	c, ok := w.chunks[chunkPos]
+	if !ok {
+		return
+	}
+
+	if lastPos != chunkPos {
+		// The entity was stored using an outdated chunk position. We update it and make sure it is ready
+		// for loaders to view it.
+		w.entities[handle] = chunkPos
+		c.Entities = append(c.Entities, handle)
+
+		var viewers []Viewer
+
+		// When changing an entity's world, then teleporting it immediately, we could end up in a situation
+		// where the old chunk of the entity was not loaded. In this case, it should be safe simply to ignore
+		// the loaders from the old chunk. We can assume they never saw the entity in the first place.
+		if old, ok := w.chunks[lastPos]; ok {
+			old.Entities = sliceutil.DeleteVal(old.Entities, handle)
+			viewers = old.viewers
+		}
+
+		for _, viewer := range viewers {
+			if slices.Index(c.viewers, viewer) == -1 {
+				// First we hide the entity from all loaders that were previously viewing it, but no
+				// longer are.
+				viewer.HideEntity(e)
+			}
+		}
+		for _, viewer := range c.viewers {
+			if slices.Index(viewers, viewer) == -1 {
+				// Then we show the entity to all loaders that are now viewing the entity in the new
+				// chunk.
+				showEntity(e, viewer)
+			}
+		}
+	}
+
+	// Only tick entities that have viewers OR are within tick range of any player
+	// This provides player-based culling for better performance
+	shouldTick := len(c.viewers) > 0 || chunksToTick[chunkPos]
+	if shouldTick {
+		if te, ok := e.(TickerEntity); ok {
+			te.Tick(tx, tick)
+		}
+	}
+}
+
+// playerChunkPositions returns all chunk positions that players are currently in.
+func (w *World) playerChunkPositions() []ChunkPos {
+	var positions []ChunkPos
+	for e := range w.entities {
+		if e.t.EncodeEntity() == "minecraft:player" {
+			positions = append(positions, chunkPosFromVec3(e.data.Pos))
+		}
+	}
+	return positions
 }
 
 // randUint4 is a structure used to generate random uint4s.

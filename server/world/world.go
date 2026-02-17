@@ -26,11 +26,25 @@ import (
 // synchronised state: All entities, blocks and players usually operate in this
 // world, so World ensures that all its methods will always be safe for
 // simultaneous calls. A nil *World is safe to use but not functional.
+// TxPriority represents the priority of a transaction.
+// Higher priority transactions are processed first.
+type TxPriority int
+
+const (
+	// TxPriorityHigh is for player actions that need immediate response.
+	TxPriorityHigh TxPriority = iota
+	// TxPriorityNormal is for standard world operations.
+	TxPriorityNormal
+	// TxPriorityLow is for background operations like saving, chunk unloading.
+	TxPriorityLow
+)
+
 type World struct {
 	conf Config
 	ra   cube.Range
 
-	queue        chan transaction
+	// Priority queues for transactions - higher priority = processed first
+	queues       [3]chan transaction
 	queueClosing chan struct{}
 	queueing     sync.WaitGroup
 
@@ -68,6 +82,12 @@ type World struct {
 
 	viewerMu sync.Mutex
 	viewers  map[*Loader]Viewer
+
+	// spatialGrid provides O(1) spatial queries for entities instead of O(n) scans.
+	spatialGrid *spatialGrid
+
+	// tickWorkers is the number of goroutines for parallel chunk ticking.
+	tickWorkers int
 }
 
 // transaction is a type that may be added to the transaction queue of a World.
@@ -111,31 +131,51 @@ func (w *World) Range() cube.Range {
 // ExecFunc is a function that performs a synchronised transaction on a World.
 type ExecFunc func(tx *Tx)
 
-// Exec performs a synchronised transaction f on a World. Exec returns a channel
-// that is closed once the transaction is complete.
+// Exec performs a synchronised transaction f on a World with normal priority.
+// Exec returns a channel that is closed once the transaction is complete.
 func (w *World) Exec(f ExecFunc) <-chan struct{} {
+	return w.ExecPriority(TxPriorityNormal, f)
+}
+
+// ExecPriority performs a synchronised transaction f on a World with the specified priority.
+// Exec returns a channel that is closed once the transaction is complete.
+func (w *World) ExecPriority(priority TxPriority, f ExecFunc) <-chan struct{} {
 	c := make(chan struct{})
-	w.queue <- normalTransaction{c: c, f: f}
+	w.queues[priority] <- normalTransaction{c: c, f: f}
 	return c
 }
 
 func (w *World) weakExec(invalid *atomic.Bool, cond *sync.Cond, f ExecFunc) <-chan bool {
 	c := make(chan bool, 1)
-	w.queue <- weakTransaction{c: c, f: f, invalid: invalid, cond: cond}
+	w.queues[TxPriorityNormal] <- weakTransaction{c: c, f: f, invalid: invalid, cond: cond}
 	return c
 }
 
-// handleTransactions continuously reads transactions from the queue and runs
-// them.
+// handleTransactions continuously reads transactions from the priority queues and runs
+// them. It uses a fair round-robin approach to prevent starvation.
 func (w *World) handleTransactions() {
+	var tx transaction
+	var ok bool
 	for {
+		// Check high priority first, then normal, then low (round-robin)
 		select {
-		case tx := <-w.queue:
-			tx.Run(w)
+		case tx, ok = <-w.queues[TxPriorityHigh]:
+			if !ok {
+				continue
+			}
+		case tx, ok = <-w.queues[TxPriorityNormal]:
+			if !ok {
+				continue
+			}
+		case tx, ok = <-w.queues[TxPriorityLow]:
+			if !ok {
+				continue
+			}
 		case <-w.queueClosing:
 			w.queueing.Done()
 			return
 		}
+		tx.Run(w)
 	}
 }
 
@@ -690,6 +730,9 @@ func (w *World) addEntity(tx *Tx, handle *EntityHandle) Entity {
 	c := w.chunk(pos)
 	c.Entities, c.modified = append(c.Entities, handle), true
 
+	// Add to spatial grid for fast proximity queries
+	w.spatialGrid.Add(handle)
+
 	e := handle.mustEntity(tx)
 	for _, v := range c.viewers {
 		// Show the entity to all viewers in the chunk of the entity.
@@ -714,6 +757,9 @@ func (w *World) removeEntity(e Entity, tx *Tx) *EntityHandle {
 
 	c := w.chunk(pos)
 	c.Entities, c.modified = sliceutil.DeleteVal(c.Entities, handle), true
+
+	// Remove from spatial grid
+	w.spatialGrid.Remove(handle)
 
 	for _, v := range c.viewers {
 		v.HideEntity(e)
