@@ -258,7 +258,10 @@ func (lt *ProjectileBehaviour) hitBlockSurviving(e *Ent, r trace.BlockResult, m 
 // entity and knocks it back. Additionally, it applies any potion effects and
 // fire if applicable.
 func (lt *ProjectileBehaviour) hitEntity(l Living, e *Ent, vel mgl64.Vec3) {
-	owner, _ := lt.conf.Owner.Entity(e.tx)
+	var owner world.Entity
+	if lt.conf.Owner != nil {
+		owner, _ = lt.conf.Owner.Entity(e.tx)
+	}
 	src := ProjectileDamageSource{Projectile: e, Owner: owner}
 	dmg := math.Ceil(lt.conf.Damage * vel.Len())
 	if lt.conf.Critical {

@@ -75,7 +75,13 @@ func (f *FireworkBehaviour) Tick(e *Ent, tx *world.Tx) *Movement {
 // tick ticks the entity, updating its velocity either with a constant factor
 // or based on the owner's position and velocity if attached.
 func (f *FireworkBehaviour) tick(e *Ent, tx *world.Tx) {
-	owner, ok := f.conf.Owner.Entity(tx)
+	var (
+		owner world.Entity
+		ok    bool
+	)
+	if f.conf.Owner != nil {
+		owner, ok = f.conf.Owner.Entity(tx)
+	}
 	if f.conf.Attached && ok {
 		// The client will propel itself to match the firework's velocity since
 		// we set the appropriate metadata.
@@ -90,7 +96,10 @@ func (f *FireworkBehaviour) tick(e *Ent, tx *world.Tx) {
 // explode causes an explosion at the position of the firework, spawning
 // particles and damaging nearby entities.
 func (f *FireworkBehaviour) explode(e *Ent, tx *world.Tx) {
-	owner, _ := f.conf.Owner.Entity(tx)
+	var owner world.Entity
+	if f.conf.Owner != nil {
+		owner, _ = f.conf.Owner.Entity(tx)
+	}
 	pos, explosions := e.Position(), f.conf.Firework.Explosions
 
 	for _, v := range tx.Viewers(pos) {

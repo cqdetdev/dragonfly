@@ -12,7 +12,9 @@ import (
 // NewBottleOfEnchanting ...
 func NewBottleOfEnchanting(opts world.EntitySpawnOpts, owner world.Entity) *world.EntityHandle {
 	conf := bottleOfEnchantingConf
-	conf.Owner = owner.H()
+	if owner != nil {
+		conf.Owner = owner.H()
+	}
 	return opts.New(BottleOfEnchantingType, conf)
 }
 

@@ -49,7 +49,10 @@ var conf = world.EntityRegistryConfig{
 	},
 	Arrow: func(opts world.EntitySpawnOpts, damage float64, owner world.Entity, critical, disallowPickup, obtainArrowOnPickup bool, punchLevel int, tip any) *world.EntityHandle {
 		conf := arrowConf
-		conf.Damage, conf.Potion, conf.Owner = damage, tip.(potion.Potion), owner.H()
+		conf.Damage, conf.Potion = damage, tip.(potion.Potion)
+		if owner != nil {
+			conf.Owner = owner.H()
+		}
 		conf.KnockBackForceAddend = float64(punchLevel) * enchantment.Punch.KnockBackMultiplier()
 		conf.DisablePickup = disallowPickup
 		if obtainArrowOnPickup {

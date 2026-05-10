@@ -83,8 +83,18 @@ func Float64(m map[string]any, k string) float64 {
 
 // Slice reads a []any value from a map at key k.
 func Slice(m map[string]any, k string) []any {
-	v, _ := m[k].([]any)
-	return v
+	switch v := m[k].(type) {
+	case []any:
+		return v
+	case []map[string]any:
+		s := make([]any, len(v))
+		for i := range v {
+			s[i] = v[i]
+		}
+		return s
+	default:
+		return nil
+	}
 }
 
 // Vec3 converts x, y and z values in an NBT map to an mgl64.Vec3.

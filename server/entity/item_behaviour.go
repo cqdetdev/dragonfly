@@ -94,7 +94,24 @@ func (i *ItemBehaviour) Tick(e *Ent, tx *world.Tx) *Movement {
 		bl.CollectCooldown = 8
 		tx.SetBlock(blockPos, bl, nil)
 	}
-	return i.passive.Tick(e, tx)
+	m := i.passive.Tick(e, tx)
+	i.stepOnBlock(e, tx)
+	return m
+}
+
+func (i *ItemBehaviour) stepOnBlock(e *Ent, tx *world.Tx) {
+	box := e.H().Type().BBox(e).Translate(e.Position()).Grow(-0.0001)
+	low, high := cube.PosFromVec3(box.Min()), cube.PosFromVec3(box.Max())
+	y := int(math.Floor(box.Min()[1] - 0.0001))
+	for x := low[0]; x <= high[0]; x++ {
+		for z := low[2]; z <= high[2]; z++ {
+			pos := cube.Pos{x, y, z}
+			if stepper, ok := tx.Block(pos).(block.EntityStepper); ok {
+				stepper.EntityStepOn(pos, tx, e)
+				return
+			}
+		}
+	}
 }
 
 // Explode reacts to explosions. The item entity is destroyed, unless the item
