@@ -126,6 +126,26 @@ func (l Lectern) TurnPage(pos cube.Pos, tx *world.Tx, page int) error {
 	return nil
 }
 
+// RedstoneComparatorOutput returns the analog output for the lectern's current book page.
+func (l Lectern) RedstoneComparatorOutput(_ cube.Pos, _ *world.Tx, _ cube.Face) int {
+	if l.Book.Empty() {
+		return 0
+	}
+	r, ok := l.Book.Item().(readableBook)
+	if !ok {
+		return 0
+	}
+	pages := r.TotalPages()
+	if pages <= 0 {
+		return 0
+	}
+	if pages == 1 {
+		return 15
+	}
+	page := max(0, min(l.Page, pages-1))
+	return 1 + page*14/(pages-1)
+}
+
 // EncodeNBT ...
 func (l Lectern) EncodeNBT() map[string]any {
 	m := map[string]any{
@@ -156,7 +176,7 @@ func (Lectern) EncodeItem() (name string, meta int16) {
 func (l Lectern) EncodeBlock() (string, map[string]any) {
 	return "minecraft:lectern", map[string]any{
 		"minecraft:cardinal_direction": l.Facing.String(),
-		"powered_bit":                  uint8(0), // We don't support redstone, anyway.
+		"powered_bit":                  uint8(0),
 	}
 }
 

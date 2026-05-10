@@ -334,7 +334,7 @@ func (c Carrot) Hash() (uint64, uint64) {
 }
 
 func (c Chest) Hash() (uint64, uint64) {
-	return hashChest, uint64(c.Facing)
+	return hashChest, uint64(c.Facing) | uint64(boolByte(c.Trapped))<<2
 }
 
 func (ChiseledQuartz) Hash() (uint64, uint64) {

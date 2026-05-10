@@ -150,6 +150,16 @@ func (h Hopper) Tick(currentTick int64, pos cube.Pos, tx *world.Tx) {
 	tx.SetBlock(pos, h, nil)
 }
 
+// RedstonePowerUpdate returns a hopper with its locked state matching the redstone power supplied.
+func (h Hopper) RedstonePowerUpdate(_ cube.Pos, _ *world.Tx, power int) (world.Block, bool) {
+	powered := power > 0
+	if h.Powered == powered {
+		return h, false
+	}
+	h.Powered = powered
+	return h, true
+}
+
 // HopperInsertable represents a block that can have its contents inserted into by a hopper.
 type HopperInsertable interface {
 	// InsertItem handles the insert logic for that block.

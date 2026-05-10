@@ -268,6 +268,7 @@ func init() {
 	world.RegisterItem(Carrot{})
 	world.RegisterItem(IronChain{})
 	world.RegisterItem(Chest{})
+	world.RegisterItem(Chest{Trapped: true})
 	world.RegisterItem(ChiseledQuartz{})
 	world.RegisterItem(Clay{})
 	world.RegisterItem(Coal{})
