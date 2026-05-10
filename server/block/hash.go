@@ -57,6 +57,7 @@ const (
 	hashCoral
 	hashCoralBlock
 	hashCraftingTable
+	hashDaylightDetector
 	hashDeadBush
 	hashDecoratedPot
 	hashDeepslate
@@ -122,6 +123,7 @@ const (
 	hashLectern
 	hashLever
 	hashLight
+	hashLightningRod
 	hashLilyPad
 	hashLitPumpkin
 	hashLog
@@ -202,6 +204,7 @@ const (
 	hashString
 	hashSugarCane
 	hashTNT
+	hashTargetBlock
 	hashTerracotta
 	hashTorch
 	hashTuff
@@ -434,6 +437,10 @@ func (c CoralBlock) Hash() (uint64, uint64) {
 
 func (CraftingTable) Hash() (uint64, uint64) {
 	return hashCraftingTable, 0
+}
+
+func (d DaylightDetector) Hash() (uint64, uint64) {
+	return hashDaylightDetector, uint64(boolByte(d.Inverted)) | uint64(d.Power)<<1
 }
 
 func (DeadBush) Hash() (uint64, uint64) {
@@ -694,6 +701,10 @@ func (l Lever) Hash() (uint64, uint64) {
 
 func (l Light) Hash() (uint64, uint64) {
 	return hashLight, uint64(l.Level)
+}
+
+func (l LightningRod) Hash() (uint64, uint64) {
+	return hashLightningRod, uint64(l.Facing) | uint64(boolByte(l.Powered))<<3
 }
 
 func (LilyPad) Hash() (uint64, uint64) {
@@ -1014,6 +1025,10 @@ func (c SugarCane) Hash() (uint64, uint64) {
 
 func (TNT) Hash() (uint64, uint64) {
 	return hashTNT, 0
+}
+
+func (TargetBlock) Hash() (uint64, uint64) {
+	return hashTargetBlock, 0
 }
 
 func (Terracotta) Hash() (uint64, uint64) {
