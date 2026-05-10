@@ -31,6 +31,7 @@ const (
 	hashCactus
 	hashCake
 	hashCalcite
+	hashCalibratedSculkSensor
 	hashCampfire
 	hashCarpet
 	hashCarrot
@@ -185,6 +186,7 @@ const (
 	hashResinBricks
 	hashSand
 	hashSandstone
+	hashSculkSensor
 	hashSeaLantern
 	hashSeaPickle
 	hashShortGrass
@@ -342,6 +344,10 @@ func (c Cake) Hash() (uint64, uint64) {
 
 func (Calcite) Hash() (uint64, uint64) {
 	return hashCalcite, 0
+}
+
+func (s CalibratedSculkSensor) Hash() (uint64, uint64) {
+	return hashCalibratedSculkSensor, uint64(s.Facing) | uint64(s.Phase)<<2
 }
 
 func (c Campfire) Hash() (uint64, uint64) {
@@ -958,6 +964,10 @@ func (s Sand) Hash() (uint64, uint64) {
 
 func (s Sandstone) Hash() (uint64, uint64) {
 	return hashSandstone, uint64(s.Type.Uint8()) | uint64(boolByte(s.Red))<<2
+}
+
+func (s SculkSensor) Hash() (uint64, uint64) {
+	return hashSculkSensor, uint64(s.Phase)
 }
 
 func (SeaLantern) Hash() (uint64, uint64) {
