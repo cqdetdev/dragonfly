@@ -119,6 +119,56 @@ func (d WoodDoor) Activate(pos cube.Pos, _ cube.Face, tx *world.Tx, _ item.User,
 	return true
 }
 
+// RedstonePowerUpdate returns a door half with its open state matching the redstone power supplied.
+func (d WoodDoor) RedstonePowerUpdate(pos cube.Pos, tx *world.Tx, power int) (world.Block, bool) {
+	open := d.redstoneDoorPower(pos, tx, power) > 0
+	if d.Open == open {
+		return d, false
+	}
+	d.Open = open
+	return d, true
+}
+
+// RedstonePowerTransitionUpdate opens on a rising redstone edge and closes only after a previous powered state.
+func (d WoodDoor) RedstonePowerTransitionUpdate(pos cube.Pos, tx *world.Tx, oldPower, newPower int) (world.Block, bool) {
+	open, changed := redstoneOpenableTransition(d.Open, oldPower, d.redstoneDoorPower(pos, tx, newPower))
+	if !changed {
+		return d, false
+	}
+	d.Open = open
+	return d, true
+}
+
+// RedstonePowerPostUpdate syncs the other door half after an uncancelled redstone update.
+func (d WoodDoor) RedstonePowerPostUpdate(pos cube.Pos, tx *world.Tx, _, after world.Block, _, _ int) {
+	door := after.(WoodDoor)
+	otherPos := pos.Side(cube.Face(boolByte(!door.Top)))
+	if other, ok := tx.Block(otherPos).(WoodDoor); ok && other.Open != door.Open {
+		other.Open = door.Open
+		tx.SetBlock(otherPos, other, &world.SetOpts{DisableBlockUpdates: true, DisableRedstoneUpdates: true})
+	}
+}
+
+// RedstonePowerUpdateSound returns the sound for a redstone-driven door state change.
+func (d WoodDoor) RedstonePowerUpdateSound(_ cube.Pos, _ *world.Tx, _ world.Block, after world.Block, _, _ int) world.Sound {
+	door := after.(WoodDoor)
+	if door.Open {
+		return sound.DoorOpen{Block: door}
+	}
+	return sound.DoorClose{Block: door}
+}
+
+func (d WoodDoor) redstoneDoorPower(pos cube.Pos, tx *world.Tx, power int) int {
+	if tx == nil {
+		return power
+	}
+	otherPos := pos.Side(cube.Face(boolByte(!d.Top)))
+	if _, ok := tx.Block(otherPos).(WoodDoor); ok {
+		power = max(power, tx.RedstonePower(otherPos))
+	}
+	return power
+}
+
 // BreakInfo ...
 func (d WoodDoor) BreakInfo() BreakInfo {
 	return newBreakInfo(3, alwaysHarvestable, axeEffective, oneOf(d))

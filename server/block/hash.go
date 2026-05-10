@@ -106,7 +106,9 @@ const (
 	hashIron
 	hashIronBars
 	hashIronChain
+	hashIronDoor
 	hashIronOre
+	hashIronTrapdoor
 	hashItemFrame
 	hashJukebox
 	hashKelp
@@ -627,8 +629,16 @@ func (c IronChain) Hash() (uint64, uint64) {
 	return hashIronChain, uint64(c.Axis)
 }
 
+func (d IronDoor) Hash() (uint64, uint64) {
+	return hashIronDoor, uint64(d.Facing) | uint64(boolByte(d.Open))<<2 | uint64(boolByte(d.Top))<<3 | uint64(boolByte(d.Right))<<4
+}
+
 func (i IronOre) Hash() (uint64, uint64) {
 	return hashIronOre, uint64(i.Type.Uint8())
+}
+
+func (t IronTrapdoor) Hash() (uint64, uint64) {
+	return hashIronTrapdoor, uint64(t.Facing) | uint64(boolByte(t.Open))<<2 | uint64(boolByte(t.Top))<<3
 }
 
 func (i ItemFrame) Hash() (uint64, uint64) {

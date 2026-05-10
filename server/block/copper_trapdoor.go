@@ -93,6 +93,35 @@ func (t CopperTrapdoor) Activate(pos cube.Pos, _ cube.Face, tx *world.Tx, _ item
 	return true
 }
 
+// RedstonePowerUpdate returns a trapdoor with its open state matching the redstone power supplied.
+func (t CopperTrapdoor) RedstonePowerUpdate(_ cube.Pos, _ *world.Tx, power int) (world.Block, bool) {
+	open := power > 0
+	if t.Open == open {
+		return t, false
+	}
+	t.Open = open
+	return t, true
+}
+
+// RedstonePowerTransitionUpdate opens on a rising redstone edge and closes only after a previous powered state.
+func (t CopperTrapdoor) RedstonePowerTransitionUpdate(_ cube.Pos, _ *world.Tx, oldPower, newPower int) (world.Block, bool) {
+	open, changed := redstoneOpenableTransition(t.Open, oldPower, newPower)
+	if !changed {
+		return t, false
+	}
+	t.Open = open
+	return t, true
+}
+
+// RedstonePowerUpdateSound returns the sound for a redstone-driven copper trapdoor state change.
+func (t CopperTrapdoor) RedstonePowerUpdateSound(_ cube.Pos, _ *world.Tx, _ world.Block, after world.Block, _, _ int) world.Sound {
+	trapdoor := after.(CopperTrapdoor)
+	if trapdoor.Open {
+		return sound.TrapdoorOpen{Block: trapdoor}
+	}
+	return sound.TrapdoorClose{Block: trapdoor}
+}
+
 func (t CopperTrapdoor) RandomTick(pos cube.Pos, tx *world.Tx, r *rand.Rand) {
 	attemptOxidation(pos, tx, r, t)
 }

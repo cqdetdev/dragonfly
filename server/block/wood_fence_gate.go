@@ -92,6 +92,35 @@ func (f WoodFenceGate) Activate(pos cube.Pos, _ cube.Face, tx *world.Tx, u item.
 	return true
 }
 
+// RedstonePowerUpdate returns a fence gate with its open state matching the redstone power supplied.
+func (f WoodFenceGate) RedstonePowerUpdate(_ cube.Pos, _ *world.Tx, power int) (world.Block, bool) {
+	open := power > 0
+	if f.Open == open {
+		return f, false
+	}
+	f.Open = open
+	return f, true
+}
+
+// RedstonePowerTransitionUpdate opens on a rising redstone edge and closes only after a previous powered state.
+func (f WoodFenceGate) RedstonePowerTransitionUpdate(_ cube.Pos, _ *world.Tx, oldPower, newPower int) (world.Block, bool) {
+	open, changed := redstoneOpenableTransition(f.Open, oldPower, newPower)
+	if !changed {
+		return f, false
+	}
+	f.Open = open
+	return f, true
+}
+
+// RedstonePowerUpdateSound returns the sound for a redstone-driven fence gate state change.
+func (f WoodFenceGate) RedstonePowerUpdateSound(_ cube.Pos, _ *world.Tx, _ world.Block, after world.Block, _, _ int) world.Sound {
+	gate := after.(WoodFenceGate)
+	if gate.Open {
+		return sound.FenceGateOpen{Block: gate}
+	}
+	return sound.FenceGateClose{Block: gate}
+}
+
 // SideClosed ...
 func (f WoodFenceGate) SideClosed(cube.Pos, cube.Pos, *world.Tx) bool {
 	return false

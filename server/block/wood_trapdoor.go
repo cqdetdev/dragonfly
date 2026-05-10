@@ -67,6 +67,35 @@ func (t WoodTrapdoor) Activate(pos cube.Pos, _ cube.Face, tx *world.Tx, _ item.U
 	return true
 }
 
+// RedstonePowerUpdate returns a trapdoor with its open state matching the redstone power supplied.
+func (t WoodTrapdoor) RedstonePowerUpdate(_ cube.Pos, _ *world.Tx, power int) (world.Block, bool) {
+	open := power > 0
+	if t.Open == open {
+		return t, false
+	}
+	t.Open = open
+	return t, true
+}
+
+// RedstonePowerTransitionUpdate opens on a rising redstone edge and closes only after a previous powered state.
+func (t WoodTrapdoor) RedstonePowerTransitionUpdate(_ cube.Pos, _ *world.Tx, oldPower, newPower int) (world.Block, bool) {
+	open, changed := redstoneOpenableTransition(t.Open, oldPower, newPower)
+	if !changed {
+		return t, false
+	}
+	t.Open = open
+	return t, true
+}
+
+// RedstonePowerUpdateSound returns the sound for a redstone-driven trapdoor state change.
+func (t WoodTrapdoor) RedstonePowerUpdateSound(_ cube.Pos, _ *world.Tx, _ world.Block, after world.Block, _, _ int) world.Sound {
+	trapdoor := after.(WoodTrapdoor)
+	if trapdoor.Open {
+		return sound.TrapdoorOpen{Block: trapdoor}
+	}
+	return sound.TrapdoorClose{Block: trapdoor}
+}
+
 // BreakInfo ...
 func (t WoodTrapdoor) BreakInfo() BreakInfo {
 	return newBreakInfo(3, alwaysHarvestable, axeEffective, oneOf(t))
