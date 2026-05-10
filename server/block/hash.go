@@ -209,6 +209,7 @@ const (
 	hashTargetBlock
 	hashTerracotta
 	hashTorch
+	hashTripwireHook
 	hashTuff
 	hashTuffBricks
 	hashVines
@@ -1047,6 +1048,10 @@ func (Terracotta) Hash() (uint64, uint64) {
 
 func (t Torch) Hash() (uint64, uint64) {
 	return hashTorch, uint64(t.Facing) | uint64(t.Type.Uint8())<<3
+}
+
+func (h TripwireHook) Hash() (uint64, uint64) {
+	return hashTripwireHook, uint64(h.Direction) | uint64(boolByte(h.Attached))<<8 | uint64(boolByte(h.Powered))<<9
 }
 
 func (t Tuff) Hash() (uint64, uint64) {
