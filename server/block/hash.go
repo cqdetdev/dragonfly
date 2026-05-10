@@ -152,6 +152,8 @@ const (
 	hashPackedIce
 	hashPackedMud
 	hashPinkPetals
+	hashPiston
+	hashPistonArm
 	hashPlanks
 	hashPodzol
 	hashPolishedBlackstoneBrick
@@ -200,6 +202,7 @@ const (
 	hashStainedGlassPane
 	hashStainedTerracotta
 	hashStairs
+	hashStickyPiston
 	hashStone
 	hashStoneBricks
 	hashStonecutter
@@ -822,6 +825,14 @@ func (p PinkPetals) Hash() (uint64, uint64) {
 	return hashPinkPetals, uint64(p.AdditionalCount) | uint64(p.Facing)<<8
 }
 
+func (p Piston) Hash() (uint64, uint64) {
+	return hashPiston, uint64(p.Facing)
+}
+
+func (p PistonArm) Hash() (uint64, uint64) {
+	return hashPistonArm, uint64(p.Facing) | uint64(boolByte(p.Sticky))<<3
+}
+
 func (p Planks) Hash() (uint64, uint64) {
 	return hashPlanks, uint64(p.Wood.Uint8())
 }
@@ -1012,6 +1023,10 @@ func (t StainedTerracotta) Hash() (uint64, uint64) {
 
 func (s Stairs) Hash() (uint64, uint64) {
 	return hashStairs, world.BlockHash(s.Block) | uint64(boolByte(s.UpsideDown))<<32 | uint64(s.Facing)<<33
+}
+
+func (p StickyPiston) Hash() (uint64, uint64) {
+	return hashStickyPiston, uint64(p.Facing)
 }
 
 func (s Stone) Hash() (uint64, uint64) {
