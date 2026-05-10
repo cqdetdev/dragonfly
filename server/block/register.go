@@ -9,6 +9,7 @@ import (
 
 // init registers all blocks implemented by Dragonfly.
 func init() {
+	registerAll(allActivatorRails())
 	world.RegisterBlock(Air{})
 	world.RegisterBlock(Amethyst{})
 	world.RegisterBlock(AncientDebris{})
@@ -166,6 +167,7 @@ func init() {
 	registerAll(allCoralBlocks())
 	registerAll(allDeepslate())
 	registerAll(allDaylightDetectors())
+	registerAll(allDetectorRails())
 	registerAll(allDoors())
 	registerAll(allDoubleFlowers())
 	registerAll(allDoubleTallGrass())
@@ -207,6 +209,7 @@ func init() {
 	registerAll(allPlanks())
 	registerAll(allPotato())
 	registerAll(allPressurePlates())
+	registerAll(allPoweredRails())
 	registerAll(allPrismarine())
 	registerAll(allPumpkinStems())
 	registerAll(allPumpkins())
@@ -255,6 +258,7 @@ func init() {
 }
 
 func init() {
+	world.RegisterItem(ActivatorRail{})
 	world.RegisterItem(Air{})
 	world.RegisterItem(Amethyst{})
 	world.RegisterItem(AncientDebris{})
@@ -300,6 +304,7 @@ func init() {
 	world.RegisterItem(DeepslateTiles{Cracked: true})
 	world.RegisterItem(DeepslateTiles{})
 	world.RegisterItem(Diamond{})
+	world.RegisterItem(DetectorRail{})
 	world.RegisterItem(Diorite{Polished: true})
 	world.RegisterItem(Diorite{})
 	world.RegisterItem(DirtPath{})
@@ -381,6 +386,7 @@ func init() {
 	world.RegisterItem(PolishedBlackstoneBrick{})
 	world.RegisterItem(Potato{})
 	world.RegisterItem(PressurePlate{Type: redstoneSourceStone})
+	world.RegisterItem(PoweredRail{})
 	world.RegisterItem(PumpkinSeeds{})
 	world.RegisterItem(Pumpkin{Carved: true})
 	world.RegisterItem(Pumpkin{})

@@ -5,7 +5,8 @@ package block
 import "github.com/df-mc/dragonfly/server/world"
 
 const (
-	hashAir = iota
+	hashActivatorRail = iota
+	hashAir
 	hashAmethyst
 	hashAncientDebris
 	hashAndesite
@@ -65,6 +66,7 @@ const (
 	hashDeepslate
 	hashDeepslateBricks
 	hashDeepslateTiles
+	hashDetectorRail
 	hashDiamond
 	hashDiamondOre
 	hashDiorite
@@ -159,6 +161,7 @@ const (
 	hashPolishedBlackstoneBrick
 	hashPolishedTuff
 	hashPotato
+	hashPoweredRail
 	hashPressurePlate
 	hashPrismarine
 	hashPumpkin
@@ -235,6 +238,10 @@ var customBlockBase = uint64(hashCustomBlockBase - 1)
 func NextHash() uint64 {
 	customBlockBase++
 	return customBlockBase
+}
+
+func (r ActivatorRail) Hash() (uint64, uint64) {
+	return hashActivatorRail, uint64(r.Direction) | uint64(boolByte(r.Powered))<<8
 }
 
 func (Air) Hash() (uint64, uint64) {
@@ -475,6 +482,10 @@ func (d DeepslateBricks) Hash() (uint64, uint64) {
 
 func (d DeepslateTiles) Hash() (uint64, uint64) {
 	return hashDeepslateTiles, uint64(boolByte(d.Cracked))
+}
+
+func (r DetectorRail) Hash() (uint64, uint64) {
+	return hashDetectorRail, uint64(r.Direction) | uint64(boolByte(r.Powered))<<8
 }
 
 func (Diamond) Hash() (uint64, uint64) {
@@ -851,6 +862,10 @@ func (PolishedTuff) Hash() (uint64, uint64) {
 
 func (p Potato) Hash() (uint64, uint64) {
 	return hashPotato, uint64(p.Growth)
+}
+
+func (r PoweredRail) Hash() (uint64, uint64) {
+	return hashPoweredRail, uint64(r.Direction) | uint64(boolByte(r.Powered))<<8
 }
 
 func (p PressurePlate) Hash() (uint64, uint64) {
