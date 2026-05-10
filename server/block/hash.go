@@ -60,6 +60,7 @@ const (
 	hashCopperTrapdoor
 	hashCoral
 	hashCoralBlock
+	hashCrafter
 	hashCraftingTable
 	hashDaylightDetector
 	hashDeadBush
@@ -462,6 +463,10 @@ func (c Coral) Hash() (uint64, uint64) {
 
 func (c CoralBlock) Hash() (uint64, uint64) {
 	return hashCoralBlock, uint64(c.Type.Uint8()) | uint64(boolByte(c.Dead))<<3
+}
+
+func (c Crafter) Hash() (uint64, uint64) {
+	return hashCrafter, uint64(c.Orientation.Uint8()) | uint64(boolByte(c.Triggered))<<4 | uint64(boolByte(c.Crafting))<<5
 }
 
 func (CraftingTable) Hash() (uint64, uint64) {
