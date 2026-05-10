@@ -40,6 +40,7 @@ const (
 	hashCobblestone
 	hashCobweb
 	hashCocoaBean
+	hashComparator
 	hashComposter
 	hashConcrete
 	hashConcretePowder
@@ -142,6 +143,7 @@ const (
 	hashNetherite
 	hashNetherrack
 	hashNote
+	hashObserver
 	hashObsidian
 	hashPackedIce
 	hashPackedMud
@@ -169,6 +171,7 @@ const (
 	hashRedstoneTorch
 	hashRedstoneWire
 	hashReinforcedDeepslate
+	hashRepeater
 	hashResin
 	hashResinBricks
 	hashSand
@@ -363,6 +366,10 @@ func (Cobweb) Hash() (uint64, uint64) {
 
 func (c CocoaBean) Hash() (uint64, uint64) {
 	return hashCocoaBean, uint64(c.Facing) | uint64(c.Age)<<2
+}
+
+func (c Comparator) Hash() (uint64, uint64) {
+	return hashComparator, uint64(c.Facing) | uint64(boolByte(c.Subtract))<<2 | uint64(boolByte(c.Powered))<<3
 }
 
 func (c Composter) Hash() (uint64, uint64) {
@@ -773,6 +780,10 @@ func (Note) Hash() (uint64, uint64) {
 	return hashNote, 0
 }
 
+func (o Observer) Hash() (uint64, uint64) {
+	return hashObserver, uint64(o.Facing) | uint64(boolByte(o.Powered))<<3
+}
+
 func (o Obsidian) Hash() (uint64, uint64) {
 	return hashObsidian, uint64(boolByte(o.Crying))
 }
@@ -879,6 +890,10 @@ func (r RedstoneWire) Hash() (uint64, uint64) {
 
 func (ReinforcedDeepslate) Hash() (uint64, uint64) {
 	return hashReinforcedDeepslate, 0
+}
+
+func (r Repeater) Hash() (uint64, uint64) {
+	return hashRepeater, uint64(r.Facing) | uint64(r.Delay)<<2 | uint64(boolByte(r.Powered))<<10
 }
 
 func (Resin) Hash() (uint64, uint64) {
