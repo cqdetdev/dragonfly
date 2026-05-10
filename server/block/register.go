@@ -143,6 +143,7 @@ func init() {
 	registerAll(allBasalt())
 	registerAll(allBeds())
 	registerAll(allBeetroot())
+	registerAll(allBells())
 	registerAll(allBlackstone())
 	registerAll(allBlastFurnaces())
 	registerAll(allBoneBlock())
@@ -160,6 +161,7 @@ func init() {
 	registerAll(allComposters())
 	registerAll(allConcrete())
 	registerAll(allConcretePowder())
+	registerAll(allCopperBulbs())
 	registerAll(allCoral())
 	registerAll(allCoralBlocks())
 	registerAll(allDeepslate())
@@ -261,6 +263,7 @@ func init() {
 	world.RegisterItem(Beacon{})
 	world.RegisterItem(Bedrock{})
 	world.RegisterItem(BeetrootSeeds{})
+	world.RegisterItem(Bell{})
 	world.RegisterItem(BlastFurnace{})
 	world.RegisterItem(BlueIce{})
 	world.RegisterItem(Bone{})
@@ -557,6 +560,8 @@ func init() {
 		world.RegisterItem(PressurePlate{Type: typ})
 	}
 	for _, o := range OxidationTypes() {
+		world.RegisterItem(CopperBulb{Oxidation: o})
+		world.RegisterItem(CopperBulb{Oxidation: o, Waxed: true})
 		world.RegisterItem(CopperBars{Oxidation: o})
 		world.RegisterItem(CopperBars{Oxidation: o, Waxed: true})
 		world.RegisterItem(CopperChain{Oxidation: o})

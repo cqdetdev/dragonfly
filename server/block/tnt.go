@@ -40,6 +40,14 @@ func (t TNT) Ignite(pos cube.Pos, tx *world.Tx, _ world.Entity) bool {
 	return true
 }
 
+// RedstonePowerAction ignites TNT when redstone power turns on.
+func (t TNT) RedstonePowerAction(pos cube.Pos, tx *world.Tx, oldPower, newPower int) bool {
+	if oldPower == 0 && newPower > 0 {
+		return t.Ignite(pos, tx, nil)
+	}
+	return false
+}
+
 // Explode ...
 func (t TNT) Explode(_ mgl64.Vec3, pos cube.Pos, tx *world.Tx, _ ExplosionConfig) {
 	spawnTnt(pos, tx, time.Second/2+time.Duration(rand.IntN(int(time.Second+time.Second/2))))

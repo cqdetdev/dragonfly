@@ -18,6 +18,7 @@ const (
 	hashBed
 	hashBedrock
 	hashBeetrootSeeds
+	hashBell
 	hashBlackstone
 	hashBlastFurnace
 	hashBlueIce
@@ -46,6 +47,7 @@ const (
 	hashConcretePowder
 	hashCopper
 	hashCopperBars
+	hashCopperBulb
 	hashCopperChain
 	hashCopperDoor
 	hashCopperGolemStatue
@@ -283,6 +285,10 @@ func (b BeetrootSeeds) Hash() (uint64, uint64) {
 	return hashBeetrootSeeds, uint64(b.Growth)
 }
 
+func (b Bell) Hash() (uint64, uint64) {
+	return hashBell, uint64(b.Attachment.Uint8()) | uint64(b.Facing)<<2 | uint64(boolByte(b.Toggle))<<4
+}
+
 func (b Blackstone) Hash() (uint64, uint64) {
 	return hashBlackstone, uint64(b.Type.Uint8())
 }
@@ -393,6 +399,10 @@ func (c Copper) Hash() (uint64, uint64) {
 
 func (c CopperBars) Hash() (uint64, uint64) {
 	return hashCopperBars, uint64(c.Oxidation.Uint8()) | uint64(boolByte(c.Waxed))<<2
+}
+
+func (c CopperBulb) Hash() (uint64, uint64) {
+	return hashCopperBulb, uint64(c.Oxidation.Uint8()) | uint64(boolByte(c.Waxed))<<2 | uint64(boolByte(c.Lit))<<3 | uint64(boolByte(c.Powered))<<4
 }
 
 func (c CopperChain) Hash() (uint64, uint64) {
