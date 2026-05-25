@@ -1,6 +1,7 @@
 package world
 
 import (
+	"container/heap"
 	"maps"
 	"math/rand/v2"
 	"slices"
@@ -268,9 +269,10 @@ func (g *randUint4) uint4(r *rand.Rand) uint8 {
 // scheduledTickQueue implements a queue for scheduled block updates. Scheduled
 // block updates are both position and block type specific.
 type scheduledTickQueue struct {
-	ticks         []scheduledTick
+	ticks         scheduledTickHeap
 	furthestTicks map[scheduledTickIndex]int64
 	currentTick   int64
+	nextOrder     uint64
 }
 
 type scheduledTick struct {
@@ -278,11 +280,42 @@ type scheduledTick struct {
 	b     Block
 	bhash uint64
 	t     int64
+	order uint64
 }
 
 type scheduledTickIndex struct {
 	pos  cube.Pos
 	hash uint64
+}
+
+type scheduledTickHeap []scheduledTick
+
+func (h scheduledTickHeap) Len() int {
+	return len(h)
+}
+
+func (h scheduledTickHeap) Less(i, j int) bool {
+	if h[i].t != h[j].t {
+		return h[i].t < h[j].t
+	}
+	return h[i].order < h[j].order
+}
+
+func (h scheduledTickHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+func (h *scheduledTickHeap) Push(x any) {
+	*h = append(*h, x.(scheduledTick))
+}
+
+func (h *scheduledTickHeap) Pop() any {
+	old := *h
+	n := len(old)
+	t := old[n-1]
+	old[n-1] = scheduledTick{}
+	*h = old[:n-1]
+	return t
 }
 
 // newScheduledTickQueue creates a queue for scheduled block ticks.
@@ -297,10 +330,8 @@ func (queue *scheduledTickQueue) tick(tx *Tx, tick int64) {
 	queue.currentTick = tick
 
 	w := tx.World()
-	for _, t := range queue.ticks {
-		if t.t > tick {
-			continue
-		}
+	for queue.ticks.Len() > 0 && queue.ticks[0].t <= tick {
+		t := heap.Pop(&queue.ticks).(scheduledTick)
 		b := tx.Block(t.pos)
 		if ticker, ok := b.(ScheduledTicker); ok && w.conf.Blocks.BlockHash(b) == t.bhash {
 			ticker.ScheduledTick(t.pos, tx, w.r)
@@ -309,15 +340,12 @@ func (queue *scheduledTickQueue) tick(tx *Tx, tick int64) {
 				ticker.ScheduledTick(t.pos, tx, w.r)
 			}
 		}
-	}
 
-	// Clear scheduled ticks that were processed from the queue.
-	queue.ticks = slices.DeleteFunc(queue.ticks, func(t scheduledTick) bool {
-		return t.t <= tick
-	})
-	maps.DeleteFunc(queue.furthestTicks, func(index scheduledTickIndex, t int64) bool {
-		return t <= tick
-	})
+		index := scheduledTickIndex{pos: t.pos, hash: t.bhash}
+		if furthest, ok := queue.furthestTicks[index]; ok && furthest <= tick {
+			delete(queue.furthestTicks, index)
+		}
+	}
 }
 
 // schedule schedules a block update at the position passed for the block type
@@ -334,7 +362,7 @@ func (queue *scheduledTickQueue) schedule(br BlockRegistry, pos cube.Pos, b Bloc
 		return
 	}
 	queue.furthestTicks[index] = resTick
-	queue.ticks = append(queue.ticks, scheduledTick{pos: pos, t: resTick, b: b, bhash: index.hash})
+	heap.Push(&queue.ticks, scheduledTick{pos: pos, t: resTick, b: b, bhash: index.hash, order: queue.nextTickOrder()})
 }
 
 // fromChunk returns all scheduled ticks positioned within a ChunkPos.
@@ -345,27 +373,70 @@ func (queue *scheduledTickQueue) fromChunk(pos ChunkPos) []scheduledTick {
 			m = append(m, t)
 		}
 	}
+	slices.SortFunc(m, func(a, b scheduledTick) int {
+		if a.t < b.t {
+			return -1
+		}
+		if a.t > b.t {
+			return 1
+		}
+		if a.order < b.order {
+			return -1
+		}
+		if a.order > b.order {
+			return 1
+		}
+		return 0
+	})
 	return m
 }
 
 // removeChunk removes all scheduled ticks positioned within a ChunkPos.
 func (queue *scheduledTickQueue) removeChunk(pos ChunkPos) {
-	queue.ticks = slices.DeleteFunc(queue.ticks, func(tick scheduledTick) bool {
-		return chunkPosFromBlockPos(tick.pos) == pos
-	})
+	ticks := queue.ticks[:0]
+	for _, tick := range queue.ticks {
+		if chunkPosFromBlockPos(tick.pos) == pos {
+			continue
+		}
+		ticks = append(ticks, tick)
+	}
+	for i := len(ticks); i < len(queue.ticks); i++ {
+		queue.ticks[i] = scheduledTick{}
+	}
+	queue.ticks = ticks
+	heap.Init(&queue.ticks)
+	queue.rebuildFurthestTicks()
 }
 
 // add adds a slice of scheduled ticks to the queue. It assumes no duplicate
 // ticks are present in the slice.
 func (queue *scheduledTickQueue) add(ticks []scheduledTick) {
-	queue.ticks = append(queue.ticks, ticks...)
-	for _, t := range ticks {
-		index := scheduledTickIndex{pos: t.pos, hash: t.bhash}
-		if existing, ok := queue.furthestTicks[index]; ok {
-			// Make sure we find the furthest tick for each of the ticks added.
-			// Some ticks may have the same block and position, in which case we
-			// need to set the furthest tick.
-			queue.furthestTicks[index] = max(existing, t.t)
-		}
+	for i := range ticks {
+		ticks[i].order = queue.nextTickOrder()
 	}
+	queue.ticks = append(queue.ticks, ticks...)
+	heap.Init(&queue.ticks)
+	for _, t := range ticks {
+		queue.recordFurthestTick(t)
+	}
+}
+
+func (queue *scheduledTickQueue) rebuildFurthestTicks() {
+	clear(queue.furthestTicks)
+	for _, t := range queue.ticks {
+		queue.recordFurthestTick(t)
+	}
+}
+
+func (queue *scheduledTickQueue) recordFurthestTick(t scheduledTick) {
+	index := scheduledTickIndex{pos: t.pos, hash: t.bhash}
+	if existing, ok := queue.furthestTicks[index]; !ok || existing < t.t {
+		queue.furthestTicks[index] = t.t
+	}
+}
+
+func (queue *scheduledTickQueue) nextTickOrder() uint64 {
+	order := queue.nextOrder
+	queue.nextOrder++
+	return order
 }
