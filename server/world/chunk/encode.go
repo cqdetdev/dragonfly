@@ -40,6 +40,11 @@ type (
 		State   map[string]any `nbt:"states"`
 		Version int32          `nbt:"version"`
 	}
+	networkEncodeCache struct {
+		valid     bool
+		subChunks [][]byte
+		biomes    []byte
+	}
 )
 
 // Encode encodes Chunk to an intermediate representation SerialisedData. An Encoding may be passed to encode either for
@@ -48,15 +53,33 @@ type (
 func Encode(c *Chunk, e Encoding) SerialisedData {
 	d := SerialisedData{SubChunks: make([][]byte, len(c.sub))}
 	for i := range c.sub {
-		d.SubChunks[i] = EncodeSubChunk(c, e, i)
+		d.SubChunks[i] = encodeSubChunk(c, e, i)
 	}
-	d.Biomes = EncodeBiomes(c, e)
+	d.Biomes = encodeBiomes(c, e)
 	return d
+}
+
+// NetworkEncode encodes Chunk using the network encoding. The returned slices are cached and must not be mutated.
+func NetworkEncode(c *Chunk) SerialisedData {
+	cache := c.networkEncoding()
+	for i := range c.sub {
+		if cache.subChunks[i] == nil {
+			cache.subChunks[i] = encodeSubChunk(c, NetworkEncoding, i)
+		}
+	}
+	if cache.biomes == nil {
+		cache.biomes = encodeBiomes(c, NetworkEncoding)
+	}
+	return SerialisedData{SubChunks: cache.subChunks, Biomes: cache.biomes}
 }
 
 // EncodeSubChunk encodes a sub-chunk from a chunk into bytes. An Encoding may be passed to encode either for network or
 // disk purposed, the most notable difference being that the network encoding generally uses varints and no NBT.
 func EncodeSubChunk(c *Chunk, e Encoding, ind int) []byte {
+	return encodeSubChunk(c, e, ind)
+}
+
+func encodeSubChunk(c *Chunk, e Encoding, ind int) []byte {
 	buf := pool.Get().(*bytes.Buffer)
 	defer func() {
 		buf.Reset()
@@ -73,9 +96,23 @@ func EncodeSubChunk(c *Chunk, e Encoding, ind int) []byte {
 	return sub
 }
 
+// NetworkEncodeSubChunk encodes a sub-chunk from a chunk using the network encoding. The returned slice is cached and
+// must not be mutated.
+func NetworkEncodeSubChunk(c *Chunk, ind int) []byte {
+	cache := c.networkEncoding()
+	if cache.subChunks[ind] == nil {
+		cache.subChunks[ind] = encodeSubChunk(c, NetworkEncoding, ind)
+	}
+	return cache.subChunks[ind]
+}
+
 // EncodeBiomes encodes the biomes of a chunk into bytes. An Encoding may be passed to encode either for network or
 // disk purposed, the most notable difference being that the network encoding generally uses varints and no NBT.
 func EncodeBiomes(c *Chunk, e Encoding) []byte {
+	return encodeBiomes(c, e)
+}
+
+func encodeBiomes(c *Chunk, e Encoding) []byte {
 	buf := pool.Get().(*bytes.Buffer)
 	defer func() {
 		buf.Reset()
@@ -90,6 +127,27 @@ func EncodeBiomes(c *Chunk, e Encoding) []byte {
 	biomes := make([]byte, buf.Len())
 	_, _ = buf.Read(biomes)
 	return biomes
+}
+
+// NetworkEncodeBiomes encodes the biomes of a chunk using the network encoding. The returned slice is cached and must
+// not be mutated.
+func NetworkEncodeBiomes(c *Chunk) []byte {
+	cache := c.networkEncoding()
+	if cache.biomes == nil {
+		cache.biomes = encodeBiomes(c, NetworkEncoding)
+	}
+	return cache.biomes
+}
+
+func (chunk *Chunk) networkEncoding() *networkEncodeCache {
+	if !chunk.networkCache.valid {
+		chunk.networkCache = networkEncodeCache{valid: true, subChunks: make([][]byte, len(chunk.sub))}
+	}
+	return &chunk.networkCache
+}
+
+func (chunk *Chunk) invalidateNetworkCache() {
+	chunk.networkCache.valid = false
 }
 
 // encodePalettedStorage encodes a PalettedStorage into a bytes.Buffer. The Encoding passed is used to write the Palette

@@ -26,6 +26,8 @@ type Chunk struct {
 	sub []*SubChunk
 	// biomes is an array of biome IDs. There is one biome ID for every column in the chunk.
 	biomes []*PalettedStorage
+
+	networkCache networkEncodeCache
 }
 
 // New initialises a new chunk and returns it, so that it may be used.
@@ -97,6 +99,7 @@ func (chunk *Chunk) SetBlock(x uint8, y int16, z uint8, layer uint8, block uint3
 		// Don't do anything with this, just return.
 		return
 	}
+	chunk.invalidateNetworkCache()
 	sub.Layer(layer).Set(x, uint8(y), z, block)
 	chunk.recalculateHeightMap = true
 }
@@ -108,6 +111,7 @@ func (chunk *Chunk) Biome(x uint8, y int16, z uint8) uint32 {
 
 // SetBiome sets the biome ID at a specific column in the chunk.
 func (chunk *Chunk) SetBiome(x uint8, y int16, z uint8, biome uint32) {
+	chunk.invalidateNetworkCache()
 	chunk.biomes[chunk.SubIndex(y)].Set(x, uint8(y), z, biome)
 }
 
@@ -192,6 +196,7 @@ func (chunk *Chunk) HeightMap() HeightMap {
 // all storages in the sub chunks to occupy as little space as possible.
 // Compact should be called right before the chunk is saved in order to optimise the storage space.
 func (chunk *Chunk) Compact() {
+	chunk.invalidateNetworkCache()
 	for i := range chunk.sub {
 		chunk.sub[i].compact()
 	}
