@@ -11,11 +11,9 @@ import (
 )
 
 // blocksWithin returns an iterator over the positions of blocks matching one of the block states passed, within a
-// horizontal square radius around pos. Sub-chunk palettes are checked before any blocks are read, so sub-chunks that
-// cannot contain one of the blocks are skipped without iterating their storage. Chunks that are not loaded are read
-// from the provider without being loaded into the world. Chunks that do not exist are skipped, not generated.
-// ponytail: palettes are re-read per search instead of kept in a block index; portal searches are rare enough that
-// maintaining an index (and invalidating it on every block change) is not worth it. Add one if searches become hot.
+// horizontal square radius around pos. Sub-chunk palettes are checked first, skipping sub-chunks that cannot contain
+// a matching block. Unloaded chunks are read from the provider without being loaded; missing chunks are skipped, not
+// generated. blocksWithin must only be called during a transaction.
 func (w *World) blocksWithin(pos cube.Pos, radius int, blocks ...Block) iter.Seq[cube.Pos] {
 	return func(yield func(cube.Pos) bool) {
 		if radius <= 0 || len(blocks) == 0 {
@@ -32,6 +30,7 @@ func (w *World) blocksWithin(pos cube.Pos, radius int, blocks ...Block) iter.Seq
 
 		minChunk := chunkPosFromBlockPos(cube.Pos{minX, 0, minZ})
 		maxChunk := chunkPosFromBlockPos(cube.Pos{maxX - 1, 0, maxZ - 1})
+		var logged bool
 		for chunkX := minChunk.X(); chunkX <= maxChunk.X(); chunkX++ {
 			for chunkZ := minChunk.Z(); chunkZ <= maxChunk.Z(); chunkZ++ {
 				chunkPos := ChunkPos{chunkX, chunkZ}
@@ -41,8 +40,10 @@ func (w *World) blocksWithin(pos cube.Pos, radius int, blocks ...Block) iter.Seq
 				} else {
 					col, err := w.conf.Provider.LoadColumn(chunkPos, w.conf.Dim)
 					if err != nil {
-						if !errors.Is(err, leveldb.ErrNotFound) {
+						if !errors.Is(err, leveldb.ErrNotFound) && !logged {
+							// Log only the first error: a systemic provider failure would otherwise log once per chunk.
 							w.conf.Log.Error("blocks within: "+err.Error(), "X", chunkX, "Z", chunkZ)
+							logged = true
 						}
 						continue
 					}
