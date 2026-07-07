@@ -51,6 +51,13 @@ func (tx *Tx) Block(pos cube.Pos) Block {
 	return tx.World().block(pos)
 }
 
+// BlocksWithin returns an iterator that yields the positions of blocks matching any of the block states passed,
+// within a horizontal square radius around pos. Both loaded chunks and chunks present in the world save are searched.
+// Chunks that do not exist are skipped and not generated.
+func (tx *Tx) BlocksWithin(pos cube.Pos, radius int, blocks ...Block) iter.Seq[cube.Pos] {
+	return tx.World().blocksWithin(pos, radius, blocks...)
+}
+
 // Liquid attempts to return a Liquid block at the position passed. This
 // Liquid may be in the foreground or in any other layer. If found, the Liquid
 // is returned. If not, the bool returned is false.
