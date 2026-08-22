@@ -44,7 +44,7 @@ func (conf Config) Open(dir string) (*DB, error) {
 
 	_ = os.MkdirAll(filepath.Join(dir, "db"), 0777)
 
-	db := &DB{conf: conf, dir: dir, ldat: &leveldat.Data{}}
+	db := &DB{conf: conf, dir: dir, ldat: &leveldat.Data{RespawnBlocksExplode: true}}
 	db.SetBlockRegistry(conf.Blocks)
 	if _, err := os.Stat(filepath.Join(dir, "level.dat")); os.IsNotExist(err) {
 		// A level.dat was not currently present for the world.

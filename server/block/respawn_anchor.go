@@ -60,7 +60,7 @@ func (r RespawnAnchor) Activate(pos cube.Pos, _ cube.Face, tx *world.Tx, u item.
 
 // explode creates the Respawn anchor's incendiary explosion.
 func (r RespawnAnchor) explode(pos cube.Pos, tx *world.Tx) {
-	ExplosionConfig{SpawnFire: true}.explode(tx, world.BlockExplosionSource{
+	ExplosionConfig{SpawnFire: true, SuppressUnderwaterImpact: true}.explode(tx, world.BlockExplosionSource{
 		Block:         r,
 		Pos:           pos,
 		ExplosionSize: 5,

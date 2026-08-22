@@ -85,9 +85,9 @@ func (c ExplosionConfig) Explode(tx *world.Tx, src world.ExplosionSource) {
 	c.explode(tx, src, false)
 }
 
-// explode performs the explosion, suppressing block and entity impact when suppressImpact is true while retaining the
-// event, sound and particle.
-func (c ExplosionConfig) explode(tx *world.Tx, src world.ExplosionSource, suppressImpact bool) {
+// explode performs the explosion, suppressing block impact when suppressBlockImpact is true while retaining entity
+// impact, the event, sound and particle.
+func (c ExplosionConfig) explode(tx *world.Tx, src world.ExplosionSource, suppressBlockImpact bool) {
 	if c.Sound == nil {
 		c.Sound = sound.Explosion{}
 	}
@@ -114,16 +114,14 @@ func (c ExplosionConfig) explode(tx *world.Tx, src world.ExplosionSource, suppre
 	)
 
 	affectedEntities := make([]world.Entity, 0, 32)
-	if !suppressImpact {
-		for e := range tx.EntitiesWithin(box.Grow(2)) {
-			pos := e.Position()
-			dist := pos.Sub(explosionPos).Len()
-			if dist > d || dist == 0 {
-				continue
-			}
-
-			affectedEntities = append(affectedEntities, e)
+	for e := range tx.EntitiesWithin(box.Grow(2)) {
+		pos := e.Position()
+		dist := pos.Sub(explosionPos).Len()
+		if dist > d || dist == 0 {
+			continue
 		}
+
+		affectedEntities = append(affectedEntities, e)
 	}
 
 	estimatedBlocks := max(32, min(4096, int(size*size*size*16)))
@@ -133,7 +131,7 @@ func (c ExplosionConfig) explode(tx *world.Tx, src world.ExplosionSource, suppre
 	}
 	affectedBlocks := make([]cube.Pos, 0, estimatedBlocks)
 	blockCache := make(map[cube.Pos]explosionBlockInfo, estimatedBlocks)
-	if !suppressImpact {
+	if !suppressBlockImpact {
 		for _, ray := range rays {
 			pos := explosionPos
 			for blastForce := size * (0.7 + r.Float64()*0.6); blastForce > 0.0; blastForce -= 0.225 {
