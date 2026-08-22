@@ -151,13 +151,19 @@ func (s *Session) ViewEntity(e world.Entity) {
 		EntityRuntimeID: runtimeID,
 		EntityType:      id,
 		EntityMetadata:  metadata,
-		Position:        vec64To32(e.Position()),
+		Position:        vec64To32(actorSpawnPosition(e)),
 		Velocity:        vec64To32(vel),
 		Pitch:           float32(pitch),
 		Yaw:             float32(yaw),
 		HeadYaw:         float32(yaw),
 		BodyYaw:         float32(yaw),
 	})
+}
+
+// actorSpawnPosition returns the initial client position for an AddActor
+// packet, including the entity type's network offset.
+func actorSpawnPosition(e world.Entity) mgl64.Vec3 {
+	return e.Position().Add(entityOffset(e))
 }
 
 // ViewEntityGameMode ...

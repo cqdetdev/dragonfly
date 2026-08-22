@@ -639,17 +639,29 @@ type actorIdentifier struct {
 
 // sendAvailableEntities sends all registered entities to the player.
 func (s *Session) sendAvailableEntities(w *world.World) {
-	var identifiers []actorIdentifier
-	for _, t := range w.EntityRegistry().Types() {
-		id := t.EncodeEntity()
-		if networkType, ok := t.(NetworkEncodeableEntity); ok {
-			id = networkType.NetworkEncodeEntity()
-		}
-		identifiers = append(identifiers, actorIdentifier{ID: id})
-	}
+	identifiers := availableActorIdentifiers(w.EntityRegistry().Types())
 	serialisedEntityData, err := nbt.Marshal(map[string]any{"idlist": identifiers})
 	if err != nil {
 		panic("should never happen")
 	}
 	s.writePacket(&packet.AvailableActorIdentifiers{SerialisedEntityIdentifiers: serialisedEntityData})
+}
+
+// availableActorIdentifiers returns each client actor ID once, even when
+// multiple logical entity types share the same client representation.
+func availableActorIdentifiers(types []world.EntityType) []actorIdentifier {
+	identifiers := make([]actorIdentifier, 0, len(types))
+	seen := make(map[string]struct{}, len(types))
+	for _, t := range types {
+		id := t.EncodeEntity()
+		if networkType, ok := t.(NetworkEncodeableEntity); ok {
+			id = networkType.NetworkEncodeEntity()
+		}
+		if _, duplicate := seen[id]; duplicate {
+			continue
+		}
+		seen[id] = struct{}{}
+		identifiers = append(identifiers, actorIdentifier{ID: id})
+	}
+	return identifiers
 }

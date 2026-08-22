@@ -54,6 +54,7 @@ var components = struct {
 }{
 	byName: map[string]*componentInfo{},
 	byType: map[reflect.Type]*componentInfo{},
+	byID:   []*componentInfo{nil},
 }
 
 // RegisterComponent registers T under a namespaced name and returns its key.
@@ -88,6 +89,20 @@ func RegisterComponent[T any](name string) ComponentKey[T] {
 	return ComponentKey[T]{id: info.id}
 }
 
+// info returns the registry entry represented by k. It panics with a clear
+// diagnostic for zero, stale, or type-mismatched keys.
+func (k ComponentKey[T]) info() *componentInfo {
+	byID := componentRegistrySnapshot()
+	if k.id == 0 || int(k.id) >= len(byID) {
+		panic("world.ComponentKey: zero or unregistered key")
+	}
+	info := byID[k.id]
+	if info == nil || info.typ != reflect.TypeFor[T]() {
+		panic(fmt.Sprintf("world.ComponentKey: key does not identify component type %v", reflect.TypeFor[T]()))
+	}
+	return info
+}
+
 type componentSlot struct {
 	id componentID
 	v  any
@@ -110,38 +125,39 @@ func componentRegistrySnapshot() []*componentInfo {
 	return components.byID
 }
 
-// Of returns the entity's component, or nil if it is not attached. Call Of
-// only from the world's owner goroutine.
-func (k ComponentKey[T]) Of(e Entity) *T {
-	h := e.H()
+// Of returns the entity's component, or nil if it is not attached. The
+// returned pointer is valid only for the duration of tx's callback. Call
+// MarkDirty after mutating a persistent component through it.
+func (k ComponentKey[T]) Of(tx *Tx, e Entity) *T {
+	k.info()
+	h, _ := ownedComponentEntity(tx, e)
 	data := &h.data
 	if i, ok := findComponent(data, k.id); ok {
-		v := data.components[i].v.(*T)
-		if _, persistent := any(v).(NBTSaver); persistent {
-			markComponentPersistenceDirty(h)
-		}
-		return v
+		return data.components[i].v.(*T)
 	}
 	return nil
 }
 
-// Attach adds or replaces the entity's component.
-func (k ComponentKey[T]) Attach(e Entity, v T) {
-	h := e.H()
+// Attach adds or replaces the entity's component in the world owned by tx.
+func (k ComponentKey[T]) Attach(tx *Tx, e Entity, v T) {
+	k.info()
+	h, current := ownedComponentEntity(tx, e)
 	attachSlot(&h.data, componentSlot{id: k.id, v: &v})
 	if _, persistent := any(&v).(NBTSaver); persistent {
-		markComponentPersistenceDirty(h)
+		markComponentPersistenceDirty(tx, h)
 	}
-	MarkMetaDirty(e)
+	markMetaDirty(tx, current)
 }
 
-// Detach removes the entity's component if it is attached.
-func (k ComponentKey[T]) Detach(e Entity) {
-	h := e.H()
+// Detach removes the entity's component if it is attached in the world owned
+// by tx.
+func (k ComponentKey[T]) Detach(tx *Tx, e Entity) {
+	info := k.info()
+	h, current := ownedComponentEntity(tx, e)
 	if i, ok := findComponent(&h.data, k.id); ok {
 		v := h.data.components[i].v
 		h.data.components = slices.Delete(h.data.components, i, i+1)
-		name := componentRegistrySnapshot()[k.id].name
+		name := info.name
 		if _, retained := h.data.unknownComponents[name]; !retained {
 			h.data.componentOrder = slices.DeleteFunc(h.data.componentOrder, func(entry string) bool {
 				return entry == name
@@ -149,34 +165,67 @@ func (k ComponentKey[T]) Detach(e Entity) {
 		}
 		h.data.tickers = nil
 		if _, persistent := v.(NBTSaver); persistent {
-			markComponentPersistenceDirty(h)
+			markComponentPersistenceDirty(tx, h)
 		}
-		MarkMetaDirty(e)
+		markMetaDirty(tx, current)
+	}
+}
+
+// MarkDirty marks a persistent component as changed so that its chunk is
+// included in the next save. It does nothing for absent or runtime-only
+// components.
+func (k ComponentKey[T]) MarkDirty(tx *Tx, e Entity) {
+	k.info()
+	h, _ := ownedComponentEntity(tx, e)
+	if i, ok := findComponent(&h.data, k.id); ok {
+		if _, persistent := h.data.components[i].v.(NBTSaver); persistent {
+			markComponentPersistenceDirty(tx, h)
+		}
 	}
 }
 
 // MarkMetaDirty sends the entity's latest metadata to its viewers. Attach and
 // Detach call it automatically.
-func MarkMetaDirty(e Entity) {
-	h := e.H()
-	if h.w == nil {
-		return
-	}
-	for _, viewer := range h.w.viewersOf(h.data.Pos) {
+func MarkMetaDirty(tx *Tx, e Entity) {
+	_, current := ownedComponentEntity(tx, e)
+	markMetaDirty(tx, current)
+}
+
+// MarkEntityDirty marks the entity's chunk modified so that entity-owned
+// persistent state is included in the next save.
+func MarkEntityDirty(tx *Tx, e Entity) {
+	h, _ := ownedComponentEntity(tx, e)
+	markComponentPersistenceDirty(tx, h)
+}
+
+// markMetaDirty sends current entity metadata through viewers owned by tx.
+func markMetaDirty(tx *Tx, e Entity) {
+	for _, viewer := range tx.Viewers(e.Position()) {
 		viewer.ViewEntityState(e)
 	}
 }
 
-// Persistent components are marked dirty when they may have changed.
-func markComponentPersistenceDirty(h *EntityHandle) {
-	if h.w == nil {
-		return
+// ownedComponentEntity resolves e through tx and rejects cross-world access.
+func ownedComponentEntity(tx *Tx, e Entity) (*EntityHandle, Entity) {
+	if e == nil || e.H() == nil {
+		panic("world component operation: nil entity")
 	}
-	pos, ok := h.w.entities[h]
+	h := e.H()
+	current, ok := h.Entity(tx)
+	if !ok {
+		panic("world component operation: entity is not owned by transaction world")
+	}
+	return h, current
+}
+
+// markComponentPersistenceDirty marks h's current chunk modified through tx.
+func markComponentPersistenceDirty(tx *Tx, h *EntityHandle) {
+	w := tx.World()
+	pos, ok := w.entities[h]
 	if !ok {
 		return
 	}
-	if c, ok := h.w.loadedChunk(pos); ok {
+	if c, ok := w.loadedChunk(pos); ok {
 		c.modified = true
 	}
 }
@@ -291,9 +340,6 @@ func tickComponents(tx *Tx, e Entity, current int64) bool {
 			continue
 		}
 		ticker := slot.v.(TickerComponent)
-		if _, persistent := ticker.(NBTSaver); persistent {
-			markComponentPersistenceDirty(h)
-		}
 		ticker.Tick(tx, e, current)
 		if h.Closed() || h.w != tx.World() {
 			return false
@@ -437,26 +483,26 @@ func newEntityMetadata() *EntityMetadata {
 
 // SetScoreTag sets the text below the entity's name tag.
 func (m *EntityMetadata) SetScoreTag(s string) {
-	protocol.EntityDataScore.Set(m.metadata, s)
-	m.resets[protocol.EntityDataScore.ID()] = ""
+	m.metadata[protocol.EntityDataKeyScore] = s
+	m.resets[protocol.EntityDataKeyScore] = ""
 }
 
 // SetVariant sets the entity's visual variant.
 func (m *EntityMetadata) SetVariant(v int32) {
-	protocol.EntityDataVariant.Set(m.metadata, v)
-	m.resets[protocol.EntityDataVariant.ID()] = int32(0)
+	m.metadata[protocol.EntityDataKeyVariant] = v
+	m.resets[protocol.EntityDataKeyVariant] = int32(0)
 }
 
 // SetScale sets the entity's render scale.
 func (m *EntityMetadata) SetScale(s float64) {
-	protocol.EntityDataScale.Set(m.metadata, float32(s))
-	m.resets[protocol.EntityDataScale.ID()] = float32(1)
+	m.metadata[protocol.EntityDataKeyScale] = float32(s)
+	m.resets[protocol.EntityDataKeyScale] = float32(1)
 }
 
 // SetColour sets the entity's effect colour.
 func (m *EntityMetadata) SetColour(c color.RGBA) {
-	protocol.EntityDataEffectColor.Set(m.metadata, colour.Int32FromRGBA(c))
-	m.resets[protocol.EntityDataEffectColor.ID()] = int32(0)
+	m.metadata[protocol.EntityDataKeyEffectColor] = colour.Int32FromRGBA(c)
+	m.resets[protocol.EntityDataKeyEffectColor] = int32(0)
 }
 
 // AddComponentMetadata merges metadata contributed by e's components into dst.

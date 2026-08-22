@@ -544,15 +544,36 @@ type ArrowSpawnConfig struct {
 
 // New creates an EntityRegistry using conf and the EntityTypes passed.
 func (conf EntityRegistryConfig) New(ent []EntityType) EntityRegistry {
-	m := make(map[string]EntityType, len(ent))
+	reg := EntityRegistry{conf: conf, ent: make(map[string]EntityType, len(ent))}
 	for _, e := range ent {
-		name := e.EncodeEntity()
-		if _, ok := m[name]; ok {
-			panic("cannot register the same entity (" + name + ") twice")
-		}
-		m[name] = e
+		reg.Register(e)
 	}
-	return EntityRegistry{conf: conf, ent: m}
+	return reg
+}
+
+// Register adds t to the registry using copy-on-write, so a copied registry may
+// be extended without changing the original. Register must be called before
+// the registry is passed to a World. It panics for nil types and duplicate save
+// IDs.
+func (reg *EntityRegistry) Register(t EntityType) {
+	if reg == nil {
+		panic("world.EntityRegistry.Register: nil registry")
+	}
+	if t == nil {
+		panic("world.EntityRegistry.Register: nil entity type")
+	}
+	name := t.EncodeEntity()
+	if name == "" {
+		panic("world.EntityRegistry.Register: empty entity save ID")
+	}
+	if _, ok := reg.ent[name]; ok {
+		panic("world.EntityRegistry.Register: entity save ID " + name + " registered twice")
+	}
+	reg.ent = maps.Clone(reg.ent)
+	if reg.ent == nil {
+		reg.ent = map[string]EntityType{}
+	}
+	reg.ent[name] = t
 }
 
 // Config returns the EntityRegistryConfig that was used to create the

@@ -45,6 +45,12 @@ func (e *Ent) Behaviour() Behaviour {
 	return nil
 }
 
+// MarkBehaviourDirty marks versioned behaviour state for persistence. Call it
+// after mutating a PersistentBehaviour.
+func (e *Ent) MarkBehaviourDirty() {
+	world.MarkEntityDirty(e.tx, e)
+}
+
 // Explode propagates the explosion behaviour of the underlying Behaviour.
 func (e *Ent) Explode(src world.ExplosionSource, impact float64) {
 	if expl, ok := e.Behaviour().(interface {
