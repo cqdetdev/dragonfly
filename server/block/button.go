@@ -42,9 +42,9 @@ func (b Button) Activate(pos cube.Pos, _ cube.Face, tx *world.Tx, _ item.User, _
 	return true
 }
 
-// ProjectileHit presses a wooden button when struck by an arrow.
+// ProjectileHit presses a wooden button when struck by an activating projectile.
 func (b Button) ProjectileHit(pos cube.Pos, tx *world.Tx, e world.Entity, _ cube.Face) {
-	if b.Type.Wood() && b.arrowIntersects(e, buttonBox(b).Translate(pos.Vec3())) {
+	if b.Type.Wood() && b.activatingProjectileIntersects(e, buttonBox(b).Translate(pos.Vec3())) {
 		b.press(pos, tx)
 	}
 }
@@ -66,12 +66,12 @@ func (b Button) NeighbourUpdateTick(pos, _ cube.Pos, tx *world.Tx) {
 	}
 }
 
-// ScheduledTick releases the button unless an arrow still holds it down.
+// ScheduledTick releases the button unless an activating projectile still holds it down.
 func (b Button) ScheduledTick(pos cube.Pos, tx *world.Tx, _ *rand.Rand) {
 	if !b.Pressed {
 		return
 	}
-	if b.Type.Wood() && b.arrowWithin(pos, tx) {
+	if b.Type.Wood() && b.activatingProjectileWithin(pos, tx) {
 		tx.ScheduleBlockUpdate(pos, b, b.pressDuration())
 		return
 	}
@@ -80,18 +80,25 @@ func (b Button) ScheduledTick(pos cube.Pos, tx *world.Tx, _ *rand.Rand) {
 	tx.PlaySound(pos.Vec3Centre(), sound.ButtonClickOff{})
 }
 
-func (b Button) arrowWithin(pos cube.Pos, tx *world.Tx) bool {
+// activatingProjectileWithin reports whether an activating projectile intersects the button.
+func (b Button) activatingProjectileWithin(pos cube.Pos, tx *world.Tx) bool {
 	box := buttonBox(b).Translate(pos.Vec3())
 	for e := range tx.EntitiesWithin(box.Grow(1)) {
-		if b.arrowIntersects(e, box) {
+		if b.activatingProjectileIntersects(e, box) {
 			return true
 		}
 	}
 	return false
 }
 
-func (Button) arrowIntersects(e world.Entity, box cube.BBox) bool {
-	return e.H().Type().EncodeEntity() == "minecraft:arrow" && entityIntersects(e, box)
+// activatingProjectileIntersects reports whether an arrow or thrown trident intersects a box.
+func (Button) activatingProjectileIntersects(e world.Entity, box cube.BBox) bool {
+	switch e.H().Type().EncodeEntity() {
+	case "minecraft:arrow", "minecraft:thrown_trident":
+		return entityIntersects(e, box)
+	default:
+		return false
+	}
 }
 
 // buttonBox returns the visible button shape used for projectile hits.

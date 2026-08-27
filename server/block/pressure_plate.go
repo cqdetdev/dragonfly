@@ -127,13 +127,17 @@ func (p PressurePlate) detects(e world.Entity) bool {
 	if player, ok := e.(interface{ GameMode() world.GameMode }); ok && !player.GameMode().HasCollision() {
 		return false
 	}
+	entityType := e.H().Type().EncodeEntity()
+	if entityType == "minecraft:xp_orb" {
+		return false
+	}
 	if p.Type.Wood() || p.Type.Weighted() {
 		return true
 	}
 	if living, ok := e.(pressurePlateLivingEntity); ok {
 		return !living.Dead()
 	}
-	return e.H().Type().EncodeEntity() == "minecraft:armor_stand"
+	return entityType == "minecraft:armor_stand"
 }
 
 func (p PressurePlate) entitiesOn(pos cube.Pos, tx *world.Tx, limit int) int {
